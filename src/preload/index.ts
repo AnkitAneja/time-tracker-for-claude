@@ -7,6 +7,7 @@ const api: TrackerApi = {
   archiveTask: (id) => ipcRenderer.invoke('tasks:archive', id),
   setCurrentTask: (id) => ipcRenderer.invoke('tasks:setCurrent', id),
   getState: () => ipcRenderer.invoke('state:get'),
+  exportCsv: (from, to, label) => ipcRenderer.invoke('export:csv', from, to, label),
   renameTask: (id, name) => ipcRenderer.invoke('tasks:rename', id, name),
   mergeTask: (from, into) => ipcRenderer.invoke('tasks:merge', from, into),
   timeBlocks: (from, to) => ipcRenderer.invoke('blocks:list', from, to),

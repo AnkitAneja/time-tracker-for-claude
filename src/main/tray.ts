@@ -9,6 +9,11 @@ export interface TrayActions {
   openDashboard(): void
   openSetup(): void
   setupStatus(): SetupStatus
+  reminders(): boolean
+  setReminders(on: boolean): void
+  /** null when start at login isn't available (dev mode). */
+  autoStart(): boolean | null
+  setAutoStart(on: boolean): void
 }
 
 const MAX_TITLE_TASK = 24
@@ -76,6 +81,18 @@ export function createTray(tracker: Tracker, actions: TrayActions): Tray {
         label: setup === 'installed' ? '✓ Claude Code connected' : 'Set up Claude Code…',
         click: actions.openSetup
       },
+      {
+        label: 'Remind me about untagged time',
+        type: 'checkbox',
+        checked: actions.reminders(),
+        click: () => actions.setReminders(!actions.reminders())
+      },
+      ...(() => {
+        const on = actions.autoStart()
+        return on === null
+          ? [{ label: 'Start at login (installed app only)', enabled: false }]
+          : [{ label: 'Start at login', type: 'checkbox' as const, checked: on, click: () => actions.setAutoStart(!on) }]
+      })(),
       { type: 'separator' },
       { label: 'Quit', role: 'quit' }
     ]

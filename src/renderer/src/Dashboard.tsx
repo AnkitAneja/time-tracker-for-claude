@@ -75,6 +75,7 @@ export function Dashboard(): React.JSX.Element {
   const n = NEUTRAL[mode]
   const [rangeId, setRangeId] = useState<RangeId>('7d')
   const [stats, setStats] = useState<Stats | null>(null)
+  const [saved, setSaved] = useState<string | null>(null)
   const range = RANGES.find((r) => r.id === rangeId)!
 
   const load = useCallback(async () => {
@@ -153,11 +154,28 @@ export function Dashboard(): React.JSX.Element {
     <section className="dashboard">
       <div className="filters" role="group" aria-label="Date range">
         {RANGES.map((r) => (
-          <button key={r.id} className={r.id === rangeId ? 'chip active' : 'chip'} onClick={() => setRangeId(r.id)}>
+          <button key={r.id} className={r.id === rangeId ? 'chip active' : 'chip'} onClick={() => { setRangeId(r.id); setSaved(null) }}>
             {r.label}
           </button>
         ))}
+        <span className="spacer" />
+        <button
+          className="secondary"
+          disabled={!stats || view.total === 0}
+          onClick={async () => {
+            if (!stats) return
+            const label = `${dayKey(stats.from)}_to_${dayKey(stats.to - 1)}`
+            setSaved(await window.api.exportCsv(stats.from, stats.to, label))
+          }}
+        >
+          Export CSV
+        </button>
       </div>
+      {saved && (
+        <p className="ok">
+          Saved <code>{saved}</code>
+        </p>
+      )}
 
       <div className="tiles">
         <div className="tile">

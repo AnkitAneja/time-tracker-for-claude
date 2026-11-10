@@ -68,9 +68,9 @@ A usable single-developer tracker takes about 2 weeks; the team version adds 2 t
  
 - [x] Charts of time per task, per day, and per project folder (Recharts)
 - [x] Manual correction screen to move a time block to another task (Time log tab; plus rename and merge tasks)
-- [ ] CSV export for timesheets or invoicing
-- [ ] Reminder when Claude Code is active but no task is selected
-- [ ] Auto-start at login; Windows and Mac installers with `electron-builder`
+- [x] CSV export for timesheets or invoicing (Dashboard → Export CSV)
+- [x] Reminder when Claude Code is active but no task is selected (with auto naming: notifies when 5+ min of the last 30 is untagged)
+- [x] Auto-start at login; Windows and Mac installers with `electron-builder` (unsigned)
 ### Phase 3: Team version (2 to 3 weeks, only if needed)
  
 - [ ] Central server (Node with Postgres) where each app pushes records using a device token

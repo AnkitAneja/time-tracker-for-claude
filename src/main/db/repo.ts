@@ -179,6 +179,29 @@ export class Repo {
     return r.t
   }
 
+  untaggedSecondsSince(since: number): number {
+    const r = this.db
+      .prepare('SELECT COALESCE(SUM(seconds), 0) AS s FROM time_records WHERE task_id IS NULL AND timestamp >= ?')
+      .get(since) as { s: number }
+    return r.s
+  }
+
+  // --- export ---
+
+  exportRows(from: number, to: number): { day: string; task: string | null; cwd: string | null; seconds: number }[] {
+    return this.db
+      .prepare(
+        `SELECT date(r.timestamp / 1000, 'unixepoch', 'localtime') AS day, t.name AS task, s.cwd AS cwd, SUM(r.seconds) AS seconds
+         FROM time_records r
+         LEFT JOIN tasks t ON t.id = r.task_id
+         LEFT JOIN sessions s ON s.session_id = r.session_id
+         WHERE r.timestamp >= ? AND r.timestamp < ?
+         GROUP BY day, r.task_id, s.cwd
+         ORDER BY day, task IS NULL, task, cwd`
+      )
+      .all(from, to) as { day: string; task: string | null; cwd: string | null; seconds: number }[]
+  }
+
   // --- dashboard ---
 
   totalsByDay(from: number, to: number): DayTaskTotal[] {

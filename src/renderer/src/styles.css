@@ -102,3 +102,4 @@ select { font: inherit; padding: 5px 6px; border: 1px solid var(--line); border-
 .edit-task { flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
 .edit-task .row { display: flex; gap: 6px; }
 .edit-task input, .edit-task select { flex: 1; }
+.filters .spacer { flex: 1; }

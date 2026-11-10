@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import path from 'node:path'
 import type { Repo } from './db/repo'
+import { type ExportRow, toCsv } from './export'
 import { AutoTasker, type NameResult, type Namer } from './naming/autotask'
 import type { HookEvent } from './server/hooks'
 import type { ActiveTimePoint } from './server/otlp'
@@ -98,6 +99,19 @@ export class Tracker extends EventEmitter {
     this.repo.mergeTask(fromId, intoId)
     if (this.currentTaskId === fromId) this.setCurrentTask(intoId)
     else this.emit('change')
+  }
+
+  /** Timesheet CSV for [from, to). Folders with the same name are merged, like the dashboard. */
+  exportCsv(from: number, to: number): string {
+    const merged = new Map<string, ExportRow>()
+    for (const r of this.repo.exportRows(from, to)) {
+      const project = r.cwd ? path.basename(r.cwd) : null
+      const key = JSON.stringify([r.day, r.task, project])
+      const row = merged.get(key) ?? { day: r.day, task: r.task, project, seconds: 0 }
+      row.seconds += r.seconds
+      merged.set(key, row)
+    }
+    return toCsv([...merged.values()])
   }
 
   // --- corrections ---

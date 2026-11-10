@@ -10,11 +10,12 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
-    "icons": "node scripts/make-tray-icon.mts"
+    "icons": "node scripts/make-tray-icon.mts && node scripts/make-app-icon.mts",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:win": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
-    "better-sqlite3": "^13.0.3",
-    "recharts": "^3.10.1"
+    "better-sqlite3": "^13.0.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
@@ -23,9 +24,11 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "recharts": "^3.10.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.7",
     "vitest": "^5.1.0"
@@ -33,5 +36,66 @@
   "allowScripts": {
     "better-sqlite3@13.0.3": true,
     "electron@45.2.3": true
+  },
+  "productName": "Claude Time Tracker",
+  "author": "ankit",
+  "build": {
+    "appId": "dev.local.claude-time-tracker",
+    "productName": "Claude Time Tracker",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**",
+      "resources/**",
+      "package.json",
+      "!node_modules/better-sqlite3/{src,deps,docs,benchmark}/**",
+      "!node_modules/better-sqlite3/prebuilds/linux*"
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "extendInfo": {
+        "LSUIElement": false
+      },
+      "files": [
+        "!node_modules/better-sqlite3/prebuilds/win32*"
+      ]
+    },
+    "dmg": {
+      "artifactName": "Claude-Time-Tracker-${version}-${arch}.dmg"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "files": [
+        "!node_modules/better-sqlite3/prebuilds/darwin*"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "Claude-Time-Tracker-Setup-${version}.exe"
+    },
+    "npmRebuild": false
   }
 }

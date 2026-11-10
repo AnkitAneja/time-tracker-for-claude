@@ -98,6 +98,8 @@ export interface TrackerApi {
   mergeTask(fromId: number, intoId: number): Promise<void>
   timeBlocks(from: number, to: number): Promise<TimeBlock[]>
   moveBlock(block: TimeBlock, toTaskId: number | null): Promise<void>
+  /** Asks where to save, writes a timesheet CSV for [from, to). Returns the path, or null if cancelled. */
+  exportCsv(from: number, to: number, label: string): Promise<string | null>
   /** Totals for [from, to) in ms epoch. */
   getStats(from: number, to: number): Promise<Stats>
   setupPreview(): Promise<SetupPreview>

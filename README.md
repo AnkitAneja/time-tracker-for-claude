@@ -18,6 +18,24 @@ On first launch the app opens **Claude Code setup**. It shows the exact changes 
 
 Restart open Claude Code sessions afterwards. **Remove tracker settings** in the same screen undoes it.
 
+## Install (no terminal needed)
+
+```bash
+npm run dist:mac   # release/Claude-Time-Tracker-<version>-arm64.dmg and -x64.dmg
+npm run dist:win   # release/Claude-Time-Tracker-Setup-<version>.exe
+```
+
+The builds are **not code-signed**. On macOS, the first time: right-click the app → Open → Open (or System Settings → Privacy & Security → Open Anyway). On Windows, SmartScreen → More info → Run anyway.
+
+The installed app turns on **Start at login** on first run (toggle it in the menu bar). When started at login it stays in the menu bar without opening its window. Dev and installed builds share the same data folder; only one can run at a time.
+
+## Features
+
+- **Tasks:** Auto mode, pin a task, rename, merge one task into another.
+- **Dashboard:** time per day, task and project folder for today / 7 / 30 days, and **Export CSV** (date, task, folder, h:mm, decimal hours).
+- **Time log:** one day's time in blocks (session + task); move a block to another task.
+- **Reminder:** a notification when 5+ minutes of the last 30 have no task, at most every 30 minutes. Toggle in the menu bar.
+
 ## How time is attributed
 
 **Auto mode (default):** each Claude Code session gets a task named from its conversation. After Claude's first reply, the app runs `claude -p --model haiku` (your existing Claude login, a fraction of a cent per call) with the first prompt and the latest few messages, plus your task list. The model either reuses an existing task or names a new one ("Add CSV export"). Every 3 replies it checks again, so a change of topic starts a new task from that point. Time from before the first name is moved onto it. If naming fails (CLI missing, not logged in), the session goes under its folder name.
@@ -37,6 +55,8 @@ src/main/tracker.ts pinned/auto task + tagging
 src/main/naming/   auto task naming from the conversation (claude -p)
 src/main/setup.ts  settings.json merge, backup, undo
 src/main/tray.ts   tray menu
+src/main/export.ts timesheet CSV
+src/main/reminder.ts untagged time reminder
 src/renderer/      task and setup window (React)
 tests/             vitest
 ```

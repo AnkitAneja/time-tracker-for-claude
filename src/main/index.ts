@@ -1,9 +1,10 @@
 import path from 'node:path'
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, Notification } from 'electron'
 import { DEFAULT_PORT } from '../shared/types'
 import { openDatabase } from './db'
 import { Repo } from './db/repo'
 import { registerIpc } from './ipc'
+import { Reminder } from './reminder'
 import { createServer, listen } from './server'
 import { defaultSettingsPath, previewFile } from './setup'
 import { claudeCliNamer } from './naming/claude-cli'
@@ -11,6 +12,28 @@ import { Tracker } from './tracker'
 import { createTray } from './tray'
 
 const PORT = Number(process.env.CTT_PORT) || DEFAULT_PORT
+
+// Keep data in one folder for dev and installed builds. Without this, the installed app
+// (named "Claude Time Tracker") would use a different folder than dev ("claude-time-tracker").
+app.setPath('userData', path.join(app.getPath('appData'), 'claude-time-tracker'))
+app.setName('Claude Time Tracker')
+
+const LOGIN_ARG = '--hidden'
+const AUTO_START_KEY = 'auto_start_set'
+
+/** Started by the OS at login: stay in the menu bar, don't open the window. */
+function startedAtLogin(): boolean {
+  return process.argv.includes(LOGIN_ARG) || (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin)
+}
+
+/** Start at login only makes sense for the installed app; in dev it would register the bare Electron binary. */
+function canAutoStart(): boolean {
+  return app.isPackaged
+}
+
+function setAutoStart(on: boolean): void {
+  app.setLoginItemSettings({ openAtLogin: on, args: [LOGIN_ARG] })
+}
 
 // The app owns a fixed port, so only one copy may run.
 const isFirstCopy = app.requestSingleInstanceLock()
@@ -20,6 +43,8 @@ if (!isFirstCopy) {
 }
 
 let win: BrowserWindow | null = null
+
+const REMINDERS_KEY = 'reminders_off'
 
 function openWindow(view: 'tasks' | 'dashboard' | 'log' | 'setup'): void {
   if (win && !win.isDestroyed()) {
@@ -54,7 +79,8 @@ app.whenReady().then(async () => {
   const db = openDatabase(path.join(app.getPath('userData'), 'tracker.db'))
   // Auto naming runs `claude -p` in this empty folder; hooks from it are ignored.
   const namingDir = path.join(app.getPath('userData'), 'naming')
-  const tracker = new Tracker(new Repo(db), Date.now, {
+  const repo = new Repo(db)
+  const tracker = new Tracker(repo, Date.now, {
     namer: claudeCliNamer({ workDir: namingDir }),
     ignoreCwd: namingDir
   })
@@ -66,13 +92,45 @@ app.whenReady().then(async () => {
     tracker.emit('change')
   }
 
+  // Installed app: turn on start at login once, on first run. The user can turn it off in the tray.
+  if (canAutoStart() && repo.getSetting(AUTO_START_KEY) === null) {
+    setAutoStart(true)
+    repo.setSetting(AUTO_START_KEY, '1')
+  }
+
   registerIpc(tracker, settingsPath, PORT, refreshSetup)
   createTray(tracker, {
+    reminders: () => repo.getSetting(REMINDERS_KEY) === null,
+    setReminders: (on) => {
+      repo.setSetting(REMINDERS_KEY, on ? null : '1')
+      tracker.emit('change')
+    },
+    autoStart: () => (canAutoStart() ? app.getLoginItemSettings().openAtLogin : null),
+    setAutoStart: (on) => {
+      setAutoStart(on)
+      tracker.emit('change')
+    },
     openTasks: () => openWindow('tasks'),
     openDashboard: () => openWindow('dashboard'),
     openSetup: () => openWindow('setup'),
     setupStatus: () => setupStatus
   })
+
+  // Untagged time reminder. Only when no task is pinned (pinned time is never untagged anyway).
+  const reminder = new Reminder({
+    now: Date.now,
+    untaggedSince: (since) => repo.untaggedSecondsSince(since),
+    enabled: () => repo.getSetting(REMINDERS_KEY) === null && Notification.isSupported(),
+    notify: (seconds) => {
+      const n = new Notification({
+        title: 'Claude time with no task',
+        body: `${Math.round(seconds / 60)} min in the last 30 min has no task. Click to sort it out.`
+      })
+      n.on('click', () => openWindow('log'))
+      n.show()
+    }
+  })
+  setInterval(() => reminder.check(), 60_000)
 
   const server = createServer(tracker)
   try {
@@ -88,8 +146,10 @@ app.whenReady().then(async () => {
 
   console.log(`[tracker] Running (Dock icon + menu bar). Server: http://127.0.0.1:${PORT}`)
 
-  // Show the window at launch; setup first if Claude Code isn't connected yet.
-  openWindow(setupStatus === 'installed' ? 'tasks' : 'setup')
+  // Show the window at launch (setup first if Claude Code isn't connected yet),
+  // except when the OS started the app at login.
+  if (setupStatus !== 'installed') openWindow('setup')
+  else if (!startedAtLogin()) openWindow('tasks')
 
   app.on('before-quit', () => {
     server.close()
