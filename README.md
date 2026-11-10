@@ -37,7 +37,12 @@ npm run dist:mac   # release/Time-Tracker-for-Claude-Code-<version>-arm64.dmg an
 npm run dist:win   # release/Time-Tracker-for-Claude-Code-Setup-<version>.exe
 ```
 
-The builds are **not code-signed**. On macOS, the first time: right-click the app → Open → Open (or System Settings → Privacy & Security → Open Anyway). On Windows, SmartScreen → More info → Run anyway.
+The builds are not signed with an Apple Developer ID yet, so macOS asks before the first launch:
+
+- **macOS:** open the app once; when macOS says it can't verify the developer, go to System Settings → Privacy & Security, scroll down and click **Open Anyway**.
+- If macOS says the app **is damaged** (v0.1.1 and earlier), run this once in Terminal, then open the app:
+  `xattr -dr com.apple.quarantine "/Applications/Time Tracker for Claude Code.app"`
+- **Windows:** SmartScreen → More info → Run anyway.
 
 The installed app turns on **Start at login** on first run (toggle it in the menu bar). When started at login it stays in the menu bar without opening its window. Dev and installed builds share the same data folder; only one can run at a time.
 
