@@ -1,0 +1,54 @@
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "claude-code" } }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": { "name": "com.anthropic.claude_code" },
+          "metrics": [
+            {
+              "name": "claude_code.active_time.total",
+              "unit": "s",
+              "sum": {
+                "aggregationTemporality": 1,
+                "isMonotonic": true,
+                "dataPoints": [
+                  {
+                    "attributes": [
+                      { "key": "session.id", "value": { "stringValue": "sess-1" } },
+                      { "key": "type", "value": { "stringValue": "user" } }
+                    ],
+                    "startTimeUnixNano": "1762768800000000000",
+                    "timeUnixNano": "1762768810000000000",
+                    "asDouble": 4.5
+                  },
+                  {
+                    "attributes": [
+                      { "key": "session.id", "value": { "stringValue": "sess-1" } },
+                      { "key": "type", "value": { "stringValue": "cli" } }
+                    ],
+                    "startTimeUnixNano": "1762768800000000000",
+                    "timeUnixNano": "1762768810000000000",
+                    "asDouble": 5.25
+                  }
+                ]
+              }
+            },
+            {
+              "name": "claude_code.token.usage",
+              "unit": "tokens",
+              "sum": {
+                "aggregationTemporality": 1,
+                "dataPoints": [{ "asDouble": 1000, "timeUnixNano": "1762768810000000000" }]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "session_id": "sess-1",
+  "transcript_path": "/Users/dev/.claude/projects/x/sess-1.jsonl",
+  "cwd": "/Users/dev/projects/shop",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "SECRET ASSISTANT TEXT"
+}

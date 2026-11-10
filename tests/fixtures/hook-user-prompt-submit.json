@@ -1,0 +1,9 @@
+{
+  "session_id": "sess-1",
+  "prompt_id": "p-1",
+  "transcript_path": "/Users/dev/.claude/projects/x/sess-1.jsonl",
+  "cwd": "/Users/dev/projects/shop",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "SECRET PROMPT TEXT"
+}
