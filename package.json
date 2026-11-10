@@ -1,6 +1,6 @@
 {
   "name": "time-tracker-for-claude",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Menu bar app that tracks active Claude Code time per task, named automatically from the conversation",
   "main": "./out/main/index.js",
   "private": true,

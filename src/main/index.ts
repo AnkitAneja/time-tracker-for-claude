@@ -17,7 +17,8 @@ const PORT = Number(process.env.CTT_PORT) || DEFAULT_PORT
 // Keep data in one folder for dev and installed builds. Without this, the installed app
 // (named after the product) would use a different folder than dev. The folder name is kept
 // from the first version so existing data carries over.
-app.setPath('userData', path.join(app.getPath('appData'), 'claude-time-tracker'))
+// CTT_DATA_DIR points a test copy at a separate folder so it can run beside the real app.
+app.setPath('userData', process.env.CTT_DATA_DIR || path.join(app.getPath('appData'), 'claude-time-tracker'))
 app.setName('Time Tracker for Claude Code')
 
 const LOGIN_ARG = '--hidden'

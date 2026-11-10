@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Stats } from '../../shared/types'
 import { formatDuration } from '../../shared/format'
 
@@ -13,6 +13,31 @@ const NEUTRAL = {
   light: { other: '#9a9994', untagged: '#cfcec9', grid: '#ececea', text: '#52514e', surface: '#ffffff' },
   dark: { other: '#7a7974', untagged: '#4a4a47', grid: '#2e2e30', text: '#c3c2b7', surface: '#1c1c1e' }
 }
+// Chart props are built once per theme. Recharts compares props by reference, so passing
+// new objects on every render makes it recompute (and re-render) the whole chart each time.
+function chartTheme(mode: 'light' | 'dark') {
+  const n = NEUTRAL[mode]
+  return {
+    n,
+    tick: { fill: n.text, fontSize: 12 },
+    axisLine: { stroke: n.grid },
+    cursor: { fill: n.grid, opacity: 0.6 },
+    tooltip: {
+      contentStyle: { background: n.surface, border: `1px solid ${n.grid}`, borderRadius: 8, fontSize: 12 },
+      labelStyle: { color: n.text },
+      itemStyle: { color: 'inherit', padding: 0 }
+    }
+  }
+}
+const THEMES = { light: chartTheme('light'), dark: chartTheme('dark') }
+type Theme = (typeof THEMES)['light']
+
+const DAY_MARGIN = { top: 8, right: 8, bottom: 0, left: 0 }
+const HBAR_MARGIN = { top: 0, right: 56, bottom: 0, left: 0 }
+const HBAR_RADIUS: [number, number, number, number] = [0, 4, 4, 0]
+// How often new data may reload the dashboard while Claude Code is busy.
+const RELOAD_MS = 5000
+
 const OTHER = 'other'
 const UNTAGGED = 'untagged'
 
@@ -46,10 +71,37 @@ function dayKey(ms: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function dayLabel(key: string, days: number): string {
+// Formatters are expensive to create, so make them once.
+const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: 'short' })
+const DAY_MONTH = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' })
+const FULL_DAY = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+
+function keyToDate(key: string): Date {
   const [y, m, d] = key.split('-').map(Number)
-  const date = new Date(y, m - 1, d)
-  return date.toLocaleDateString(undefined, days <= 7 ? { weekday: 'short' } : { day: 'numeric', month: 'short' })
+  return new Date(y, m - 1, d)
+}
+const weekdayLabel = (key: string): string => WEEKDAY.format(keyToDate(key))
+const dayMonthLabel = (key: string): string => DAY_MONTH.format(keyToDate(key))
+const tooltipDayLabel = (key: unknown): string => FULL_DAY.format(keyToDate(String(key)))
+const durationTooltip = (v: unknown, name: unknown): [string, string] => [formatDuration(Number(v)), String(name)]
+const timeTooltip = (v: unknown): [string, string] => [formatDuration(Number(v)), 'Time']
+const durationLabel = (v: unknown): string => formatDuration(Number(v))
+const shortName = (s: string): string => (s.length > 26 ? s.slice(0, 25) + '…' : s)
+
+/** Width of an element, updated on resize. Re-renders only when the whole-pixel width changes. */
+function useWidth(): [React.RefObject<HTMLElement | null>, number] {
+  const ref = useRef<HTMLElement | null>(null)
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = (): void => setWidth(Math.floor(el.getBoundingClientRect().width))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, width]
 }
 
 /** Clean y-axis ticks: whole hours, or round minutes for small values. About 4 steps. */
@@ -72,21 +124,47 @@ interface Series {
 export function Dashboard(): React.JSX.Element {
   const dark = useDark()
   const mode = dark ? 'dark' : 'light'
-  const n = NEUTRAL[mode]
+  const theme = THEMES[mode]
+  const n = theme.n
   const [rangeId, setRangeId] = useState<RangeId>('7d')
   const [stats, setStats] = useState<Stats | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const range = RANGES.find((r) => r.id === rangeId)!
+  const [sectionRef, width] = useWidth()
 
+  // Only the newest request may update the page, so a slow reply for the previous
+  // range can't overwrite the current one. Identical data doesn't re-render.
+  const requestId = useRef(0)
+  const lastJson = useRef('')
   const load = useCallback(async () => {
+    const id = ++requestId.current
     const now = Date.now()
     const from = startOfDay(now - (range.days - 1) * 86_400_000)
-    setStats(await window.api.getStats(from, now + 1))
+    const next = await window.api.getStats(from, now + 1)
+    if (id !== requestId.current) return
+    // from/to move every call; compare the numbers only.
+    const json = JSON.stringify([next.byDay, next.byTask, next.byProject, next.taskRank, next.tasks])
+    if (json === lastJson.current) return
+    lastJson.current = json
+    setStats(next)
   }, [range.days])
 
   useEffect(() => {
+    lastJson.current = ''
     void load()
-    return window.api.onChange(() => void load())
+    // Claude Code sends data every few seconds; reload at most every RELOAD_MS.
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const off = window.api.onChange(() => {
+      if (timer) return
+      timer = setTimeout(() => {
+        timer = null
+        void load()
+      }, RELOAD_MS)
+    })
+    return () => {
+      off()
+      if (timer) clearTimeout(timer)
+    }
   }, [load])
 
   const view = useMemo(() => {
@@ -118,6 +196,8 @@ export function Dashboard(): React.JSX.Element {
       row[k] = ((row[k] as number) ?? 0) + r.seconds
     }
     const dayTotals = rows.map((r) => series.reduce((s, x) => s + ((r[x.key] as number) ?? 0), 0))
+    const maxDay = Math.max(0, ...dayTotals)
+    const yAxis = axisTicks(maxDay)
 
     const total = stats.byTask.reduce((s, t) => s + t.seconds, 0)
     const activeDays = dayTotals.filter((s) => s > 0).length
@@ -126,11 +206,17 @@ export function Dashboard(): React.JSX.Element {
       seconds: t.seconds,
       color: colorOf(keyOf(t.taskId))
     }))
-    const byProject = stats.byProject.map((p) => ({ name: p.project ?? 'Unknown folder', seconds: p.seconds }))
+    const byProject = stats.byProject.map((p) => ({
+      name: p.project ?? 'Unknown folder',
+      seconds: p.seconds,
+      color: SERIES[mode][0]
+    }))
     return {
       series,
       rows,
-      maxDay: Math.max(0, ...dayTotals),
+      yTicks: yAxis.ticks,
+      yDomain: [0, yAxis.ticks[yAxis.ticks.length - 1]] as [number, number],
+      yFormat: yAxis.format,
       total,
       avg: activeDays ? total / activeDays : 0,
       taskCount: stats.byTask.filter((t) => t.taskId !== null).length,
@@ -139,19 +225,13 @@ export function Dashboard(): React.JSX.Element {
     }
   }, [stats, mode, n])
 
-  if (!view) return <section>Loading…</section>
-
-  const yAxis = axisTicks(view.maxDay)
-  const tick = { fill: n.text, fontSize: 12 }
-  const tooltipStyle = {
-    contentStyle: { background: n.surface, border: `1px solid ${n.grid}`, borderRadius: 8, fontSize: 12 },
-    labelStyle: { color: n.text },
-    itemStyle: { color: 'inherit', padding: 0 }
-  }
+  const xFormat = range.days <= 7 ? weekdayLabel : dayMonthLabel
   const barHeight = (count: number): number => Math.max(80, count * 30 + 24)
 
+  if (!view) return <section ref={sectionRef as React.RefObject<HTMLElement>}>Loading…</section>
+
   return (
-    <section className="dashboard">
+    <section className="dashboard" ref={sectionRef as React.RefObject<HTMLElement>}>
       <div className="filters" role="group" aria-label="Date range">
         {RANGES.map((r) => (
           <button key={r.id} className={r.id === rangeId ? 'chip active' : 'chip'} onClick={() => { setRangeId(r.id); setSaved(null) }}>
@@ -194,8 +274,8 @@ export function Dashboard(): React.JSX.Element {
         </div>
       </div>
 
-      {view.total === 0 ? (
-        <p className="muted">No Claude Code time in this range yet.</p>
+      {view.total === 0 || width === 0 ? (
+        <p className="muted">{view.total === 0 ? 'No Claude Code time in this range yet.' : ''}</p>
       ) : (
         <>
           {range.days > 1 && (
@@ -209,50 +289,58 @@ export function Dashboard(): React.JSX.Element {
                   </li>
                 ))}
               </ul>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={view.rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                  <CartesianGrid vertical={false} stroke={n.grid} />
-                  <XAxis
-                    dataKey="day"
-                    tickFormatter={(k: string) => dayLabel(k, range.days)}
-                    tick={tick}
-                    tickLine={false}
-                    axisLine={{ stroke: n.grid }}
-                    interval="preserveStartEnd"
-                    minTickGap={12}
+              <BarChart width={width} height={200} data={view.rows} margin={DAY_MARGIN}>
+                <CartesianGrid vertical={false} stroke={n.grid} />
+                <XAxis
+                  dataKey="day"
+                  tickFormatter={xFormat}
+                  tick={theme.tick}
+                  tickLine={false}
+                  axisLine={theme.axisLine}
+                  interval="preserveStartEnd"
+                  minTickGap={12}
+                />
+                <YAxis
+                  ticks={view.yTicks}
+                  domain={view.yDomain}
+                  tickFormatter={view.yFormat}
+                  tick={theme.tick}
+                  tickLine={false}
+                  axisLine={false}
+                  width={36}
+                />
+                <Tooltip
+                  {...theme.tooltip}
+                  cursor={theme.cursor}
+                  labelFormatter={tooltipDayLabel}
+                  formatter={durationTooltip}
+                  isAnimationActive={false}
+                />
+                {view.series.map((s) => (
+                  // A 2px surface-colored edge is the gap between stacked segments.
+                  <Bar
+                    key={s.key}
+                    dataKey={s.key}
+                    name={s.name}
+                    stackId="day"
+                    fill={s.color}
+                    stroke={n.surface}
+                    strokeWidth={2}
+                    maxBarSize={24}
+                    isAnimationActive={false}
                   />
-                  <YAxis
-                    ticks={yAxis.ticks}
-                    domain={[0, yAxis.ticks[yAxis.ticks.length - 1]]}
-                    tickFormatter={yAxis.format}
-                    tick={tick}
-                    tickLine={false}
-                    axisLine={false}
-                    width={36}
-                  />
-                  <Tooltip
-                    {...tooltipStyle}
-                    cursor={{ fill: n.grid, opacity: 0.6 }}
-                    labelFormatter={(k) => dayLabel(String(k), 1) + ' ' + String(k).slice(5)}
-                    formatter={(v, name) => [formatDuration(Number(v)), name]}
-                  />
-                  {view.series.map((s) => (
-                    // A 2px surface-colored edge is the gap between stacked segments.
-                    <Bar key={s.key} dataKey={s.key} name={s.name} stackId="day" fill={s.color} stroke={n.surface} strokeWidth={2} maxBarSize={24} isAnimationActive={false} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+                ))}
+              </BarChart>
             </figure>
           )}
 
-          <HBars title="Time per task" data={view.byTask} height={barHeight(view.byTask.length)} n={n} tick={tick} tooltip={tooltipStyle} />
+          <HBars title="Time per task" data={view.byTask} width={width} height={barHeight(view.byTask.length)} theme={theme} />
           <HBars
             title="Time per project folder"
-            data={view.byProject.map((p) => ({ ...p, color: SERIES[mode][0] }))}
+            data={view.byProject}
+            width={width}
             height={barHeight(view.byProject.length)}
-            n={n}
-            tick={tick}
-            tooltip={tooltipStyle}
+            theme={theme}
           />
         </>
       )}
@@ -263,39 +351,36 @@ export function Dashboard(): React.JSX.Element {
 interface HBarsProps {
   title: string
   data: { name: string; seconds: number; color: string }[]
+  width: number
   height: number
-  n: (typeof NEUTRAL)['light']
-  tick: { fill: string; fontSize: number }
-  tooltip: object
+  theme: Theme
 }
 
 /** Horizontal bars with the value written at the tip, so no color has to be matched to read it. */
-function HBars({ title, data, height, n, tick, tooltip }: HBarsProps): React.JSX.Element {
-  const max = Math.max(0, ...data.map((d) => d.seconds))
+const HBars = memo(function HBars({ title, data, width, height, theme }: HBarsProps): React.JSX.Element {
+  const domain = useMemo<[number, number]>(() => [0, Math.max(0, ...data.map((d) => d.seconds))], [data])
   return (
     <figure>
       <figcaption>{title}</figcaption>
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 56, bottom: 0, left: 0 }}>
-          <XAxis type="number" hide domain={[0, max]} />
-          <YAxis
-            type="category"
-            dataKey="name"
-            tick={tick}
-            tickLine={false}
-            axisLine={{ stroke: n.grid }}
-            width={170}
-            tickFormatter={(s: string) => (s.length > 26 ? s.slice(0, 25) + '…' : s)}
-          />
-          <Tooltip {...tooltip} cursor={{ fill: n.grid, opacity: 0.6 }} formatter={(v) => [formatDuration(Number(v)), 'Time']} />
-          <Bar dataKey="seconds" radius={[0, 4, 4, 0]} barSize={16} isAnimationActive={false}>
-            {data.map((d) => (
-              <Cell key={d.name} fill={d.color} />
-            ))}
-            <LabelList dataKey="seconds" position="right" formatter={(v: unknown) => formatDuration(Number(v))} fill={n.text} fontSize={12} />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+      <BarChart width={width} height={height} data={data} layout="vertical" margin={HBAR_MARGIN}>
+        <XAxis type="number" hide domain={domain} />
+        <YAxis
+          type="category"
+          dataKey="name"
+          tick={theme.tick}
+          tickLine={false}
+          axisLine={theme.axisLine}
+          width={170}
+          tickFormatter={shortName}
+        />
+        <Tooltip {...theme.tooltip} cursor={theme.cursor} formatter={timeTooltip} isAnimationActive={false} />
+        <Bar dataKey="seconds" radius={HBAR_RADIUS} barSize={16} isAnimationActive={false}>
+          {data.map((d) => (
+            <Cell key={d.name} fill={d.color} />
+          ))}
+          <LabelList dataKey="seconds" position="right" formatter={durationLabel} fill={theme.n.text} fontSize={12} />
+        </Bar>
+      </BarChart>
     </figure>
   )
-}
+})

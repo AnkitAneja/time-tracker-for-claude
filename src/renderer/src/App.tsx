@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SetupPreview, SetupResult, Task, TrackerState } from '../../shared/types'
 import { formatDuration } from '../../shared/format'
 import { Dashboard } from './Dashboard'
@@ -53,8 +53,13 @@ function Tasks(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<number | null>(null)
 
+  // Skip re-rendering when nothing visible changed (lastDataAt ticks on every event).
+  const last = useRef('')
   const load = useCallback(async () => {
     const [t, s] = await Promise.all([window.api.listTasks(), window.api.getState()])
+    const json = JSON.stringify([t, { ...s, lastDataAt: null }])
+    if (json === last.current) return
+    last.current = json
     setTasks(t)
     setState(s)
   }, [])

@@ -42,7 +42,14 @@ export function registerIpc(tracker: Tracker, settingsPath: string, port: number
     return r
   })
 
+  // Claude Code sends hooks and metrics in bursts; tell windows at most once a second.
+  let queued = false
   tracker.on('change', () => {
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send('state:changed')
+    if (queued) return
+    queued = true
+    setTimeout(() => {
+      queued = false
+      for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('state:changed')
+    }, 1000)
   })
 }
