@@ -74,3 +74,7 @@ tests/             vitest
 ```
 
 Data: `~/Library/Application Support/claude-time-tracker/tracker.db` on macOS. Port can be changed with `CTT_PORT` (re-run setup after).
+
+## License
+
+[MIT](LICENSE) © 2026 Ankit Aneja

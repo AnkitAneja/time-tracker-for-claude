@@ -39,6 +39,7 @@
   },
   "productName": "Time Tracker for Claude Code",
   "author": "ankit",
+  "license": "MIT",
   "build": {
     "appId": "io.github.ankitaneja.time-tracker-for-claude",
     "productName": "Time Tracker for Claude Code",
