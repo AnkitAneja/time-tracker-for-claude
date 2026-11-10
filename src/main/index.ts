@@ -1,10 +1,11 @@
 import path from 'node:path'
-import { app, BrowserWindow, dialog, Notification } from 'electron'
+import { app, BrowserWindow, dialog, Notification, shell } from 'electron'
 import { DEFAULT_PORT } from '../shared/types'
 import { openDatabase } from './db'
 import { Repo } from './db/repo'
 import { registerIpc } from './ipc'
 import { Reminder } from './reminder'
+import { checkForUpdate, type UpdateInfo } from './updates'
 import { createServer, listen } from './server'
 import { defaultSettingsPath, previewFile } from './setup'
 import { claudeCliNamer } from './naming/claude-cli'
@@ -14,9 +15,10 @@ import { createTray } from './tray'
 const PORT = Number(process.env.CTT_PORT) || DEFAULT_PORT
 
 // Keep data in one folder for dev and installed builds. Without this, the installed app
-// (named "Claude Time Tracker") would use a different folder than dev ("claude-time-tracker").
+// (named after the product) would use a different folder than dev. The folder name is kept
+// from the first version so existing data carries over.
 app.setPath('userData', path.join(app.getPath('appData'), 'claude-time-tracker'))
-app.setName('Claude Time Tracker')
+app.setName('Time Tracker for Claude Code')
 
 const LOGIN_ARG = '--hidden'
 const AUTO_START_KEY = 'auto_start_set'
@@ -56,7 +58,7 @@ function openWindow(view: 'tasks' | 'dashboard' | 'log' | 'setup'): void {
   win = new BrowserWindow({
     width: 680,
     height: 760,
-    title: 'Claude Time Tracker',
+    title: 'Time Tracker for Claude Code',
     show: false,
     webPreferences: { preload: path.join(__dirname, '../preload/index.js'), sandbox: true, contextIsolation: true }
   })
@@ -98,8 +100,26 @@ app.whenReady().then(async () => {
     repo.setSetting(AUTO_START_KEY, '1')
   }
 
+  // Installed app: look for a newer release on GitHub at launch and every 6 hours.
+  let update: UpdateInfo | null = null
+  if (app.isPackaged) {
+    const check = async (): Promise<void> => {
+      const found = await checkForUpdate(app.getVersion())
+      if (found?.version !== update?.version) {
+        update = found
+        tracker.emit('change')
+      }
+    }
+    void check()
+    setInterval(() => void check(), 6 * 3600_000)
+  }
+
   registerIpc(tracker, settingsPath, PORT, refreshSetup)
   createTray(tracker, {
+    update: () => update,
+    openUpdate: () => {
+      if (update) void shell.openExternal(update.url)
+    },
     reminders: () => repo.getSetting(REMINDERS_KEY) === null,
     setReminders: (on) => {
       repo.setSetting(REMINDERS_KEY, on ? null : '1')
@@ -141,7 +161,7 @@ app.whenReady().then(async () => {
         ? `Port ${PORT} is in use by another program`
         : `Server failed: ${(err as Error).message}`
     tracker.setProblem(msg)
-    dialog.showErrorBox('Claude Time Tracker', `${msg}. Tracking is off until this is fixed.`)
+    dialog.showErrorBox('Time Tracker for Claude Code', `${msg}. Tracking is off until this is fixed.`)
   }
 
   console.log(`[tracker] Running (Dock icon + menu bar). Server: http://127.0.0.1:${PORT}`)

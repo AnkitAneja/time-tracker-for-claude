@@ -1,0 +1,44 @@
+name: Release
+
+# Push a tag like v0.2.0 (matching "version" in package.json) to build the installers
+# and attach them to a draft GitHub release. Review the draft, then click Publish.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: --mac
+          - os: windows-latest
+            target: --win
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Check tag matches package.json version
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          if [ "v$v" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $v"; exit 1
+          fi
+      - run: npm ci
+      - run: npm test
+      - run: npx electron-vite build
+      - name: Build installers and upload to the draft release
+        run: npx electron-builder ${{ matrix.target }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Not code-signed yet. Add signing secrets here later (see README).
+          CSC_IDENTITY_AUTO_DISCOVERY: false

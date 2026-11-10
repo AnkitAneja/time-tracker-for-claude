@@ -1,7 +1,7 @@
 {
-  "name": "claude-time-tracker",
+  "name": "time-tracker-for-claude",
   "version": "0.1.0",
-  "description": "Tray app that tracks active Claude Code time per task",
+  "description": "Menu bar app that tracks active Claude Code time per task, named automatically from the conversation",
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
@@ -37,11 +37,11 @@
     "better-sqlite3@13.0.3": true,
     "electron@45.2.3": true
   },
-  "productName": "Claude Time Tracker",
+  "productName": "Time Tracker for Claude Code",
   "author": "ankit",
   "build": {
-    "appId": "dev.local.claude-time-tracker",
-    "productName": "Claude Time Tracker",
+    "appId": "io.github.ankitaneja.time-tracker-for-claude",
+    "productName": "Time Tracker for Claude Code",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -76,7 +76,7 @@
       ]
     },
     "dmg": {
-      "artifactName": "Claude-Time-Tracker-${version}-${arch}.dmg"
+      "artifactName": "Time-Tracker-for-Claude-Code-${version}-${arch}.dmg"
     },
     "win": {
       "target": [
@@ -94,8 +94,20 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "artifactName": "Claude-Time-Tracker-Setup-${version}.exe"
+      "artifactName": "Time-Tracker-for-Claude-Code-Setup-${version}.exe"
     },
-    "npmRebuild": false
+    "npmRebuild": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AnkitAneja",
+        "repo": "time-tracker-for-claude",
+        "releaseType": "draft"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AnkitAneja/time-tracker-for-claude.git"
   }
 }

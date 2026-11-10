@@ -1,4 +1,4 @@
-# Claude Time Tracker
+# Time Tracker for Claude Code
 
 Tray app that records active Claude Code time per task. Everything stays on this machine. See [PLAN.md](PLAN.md).
 
@@ -18,11 +18,23 @@ On first launch the app opens **Claude Code setup**. It shows the exact changes 
 
 Restart open Claude Code sessions afterwards. **Remove tracker settings** in the same screen undoes it.
 
-## Install (no terminal needed)
+## Download
+
+Get the latest installer from [Releases](https://github.com/AnkitAneja/time-tracker-for-claude/releases): the `.dmg` for macOS (`arm64` = Apple Silicon, `x64` = Intel) or the `Setup .exe` for Windows. You need [Claude Code](https://docs.claude.com/en/docs/claude-code) installed. After installing, open the app and click **Apply changes** on the setup screen.
+
+The installed app checks for new releases and shows **Update available** in the menu bar.
+
+## Releasing a new version
+
+1. Bump `version` in `package.json` and commit.
+2. `git tag v<version> && git push origin main --tags`
+3. GitHub Actions builds the macOS and Windows installers and attaches them to a **draft** release. Check it, then click **Publish release**.
+
+## Build installers locally
 
 ```bash
-npm run dist:mac   # release/Claude-Time-Tracker-<version>-arm64.dmg and -x64.dmg
-npm run dist:win   # release/Claude-Time-Tracker-Setup-<version>.exe
+npm run dist:mac   # release/Time-Tracker-for-Claude-Code-<version>-arm64.dmg and -x64.dmg
+npm run dist:win   # release/Time-Tracker-for-Claude-Code-Setup-<version>.exe
 ```
 
 The builds are **not code-signed**. On macOS, the first time: right-click the app → Open → Open (or System Settings → Privacy & Security → Open Anyway). On Windows, SmartScreen → More info → Run anyway.

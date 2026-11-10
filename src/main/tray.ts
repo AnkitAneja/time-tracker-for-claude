@@ -2,6 +2,7 @@ import path from 'node:path'
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from 'electron'
 import type { Tracker } from './tracker'
 import type { SetupStatus } from '../shared/types'
+import type { UpdateInfo } from './updates'
 import { formatAgo, formatDuration } from '../shared/format'
 
 export interface TrayActions {
@@ -9,6 +10,8 @@ export interface TrayActions {
   openDashboard(): void
   openSetup(): void
   setupStatus(): SetupStatus
+  update(): UpdateInfo | null
+  openUpdate(): void
   reminders(): boolean
   setReminders(on: boolean): void
   /** null when start at login isn't available (dev mode). */
@@ -93,8 +96,12 @@ export function createTray(tracker: Tracker, actions: TrayActions): Tray {
           ? [{ label: 'Start at login (installed app only)', enabled: false }]
           : [{ label: 'Start at login', type: 'checkbox' as const, checked: on, click: () => actions.setAutoStart(!on) }]
       })(),
+      ...(() => {
+        const u = actions.update()
+        return u ? [{ type: 'separator' as const }, { label: `Update available: v${u.version}. Download…`, click: actions.openUpdate }] : []
+      })(),
       { type: 'separator' },
-      { label: 'Quit', role: 'quit' }
+      { label: `Quit (v${app.getVersion()})`, role: 'quit' }
     ]
 
     tray.setContextMenu(Menu.buildFromTemplate(items))
