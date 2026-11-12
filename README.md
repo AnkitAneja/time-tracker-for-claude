@@ -49,7 +49,7 @@ The installed app turns on **Start at login** on first run (toggle it in the men
 ## Features
 
 - **Tasks:** Auto mode, pin a task, rename, merge one task into another.
-- **Dashboard:** time per day, task and project folder for today / 7 / 30 days, and **Export CSV** (date, task, folder, h:mm, decimal hours).
+- **Dashboard:** time per day, task and project folder for today / 7 / 30 days; **Claude cost, lines added/removed and commits per task** (from Claude Code's own metrics); **Export CSV** (date, task, folder, h:mm, decimal hours, cost, lines, commits).
 - **Time log:** one day's time in blocks (session + task); move a block to another task.
 - **Reminder:** a notification when 5+ minutes of the last 30 have no task, at most every 30 minutes. Toggle in the menu bar.
 

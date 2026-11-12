@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Stats } from '../../shared/types'
-import { formatDuration } from '../../shared/format'
+import { formatCost, formatCount, formatDuration } from '../../shared/format'
 
 // Categorical slots (validated for color-blind separation, light and dark).
 // A task's color comes from its all-time rank, so it keeps its color when the range changes.
@@ -206,6 +206,25 @@ export function Dashboard(): React.JSX.Element {
       seconds: t.seconds,
       color: colorOf(keyOf(t.taskId))
     }))
+    // One table row per task that has time or usage in the range, largest time first.
+    const usageOf = new Map(stats.usageByTask.map((u) => [u.taskId, u]))
+    const ids = [...new Set([...stats.byTask.map((t) => t.taskId), ...stats.usageByTask.map((u) => u.taskId)])]
+    const secondsOf = new Map(stats.byTask.map((t) => [t.taskId, t.seconds]))
+    const table = ids
+      .map((id) => {
+        const u = usageOf.get(id)
+        return {
+          key: String(id),
+          name: id === null ? 'Untagged' : (names.get(id) ?? 'Deleted task'),
+          color: colorOf(keyOf(id)),
+          seconds: secondsOf.get(id) ?? 0,
+          cost: u?.cost ?? 0,
+          linesAdded: u?.linesAdded ?? 0,
+          linesRemoved: u?.linesRemoved ?? 0,
+          commits: u?.commits ?? 0
+        }
+      })
+      .sort((a, b) => b.seconds - a.seconds || b.cost - a.cost)
     const byProject = stats.byProject.map((p) => ({
       name: p.project ?? 'Unknown folder',
       seconds: p.seconds,
@@ -221,7 +240,9 @@ export function Dashboard(): React.JSX.Element {
       avg: activeDays ? total / activeDays : 0,
       taskCount: stats.byTask.filter((t) => t.taskId !== null).length,
       byTask,
-      byProject
+      byProject,
+      table,
+      usage: stats.usageTotal
     }
   }, [stats, mode, n])
 
@@ -272,11 +293,27 @@ export function Dashboard(): React.JSX.Element {
           <div className="tile-label">Tasks</div>
           <div className="tile-value">{view.taskCount}</div>
         </div>
+        <div className="tile">
+          <div className="tile-label">Claude cost</div>
+          <div className="tile-value">{formatCost(view.usage.cost)}</div>
+        </div>
+        <div className="tile">
+          <div className="tile-label">Lines changed</div>
+          <div className="tile-value lines">
+            <span className="added">+{formatCount(view.usage.linesAdded)}</span>{' '}
+            <span className="removed">−{formatCount(view.usage.linesRemoved)}</span>
+          </div>
+          {(view.usage.commits > 0 || view.usage.prs > 0) && (
+            <div className="tile-sub">
+              {formatCount(view.usage.commits)} commits · {formatCount(view.usage.prs)} PRs
+            </div>
+          )}
+        </div>
       </div>
 
-      {view.total === 0 || width === 0 ? (
-        <p className="muted">{view.total === 0 ? 'No Claude Code time in this range yet.' : ''}</p>
-      ) : (
+      {view.total === 0 && view.usage.cost === 0 ? (
+        <p className="muted">No Claude Code time in this range yet.</p>
+      ) : width === 0 ? null : (
         <>
           {range.days > 1 && (
             <figure>
@@ -335,6 +372,43 @@ export function Dashboard(): React.JSX.Element {
           )}
 
           <HBars title="Time per task" data={view.byTask} width={width} height={barHeight(view.byTask.length)} theme={theme} />
+
+          <figure>
+            <figcaption>Cost and output per task</figcaption>
+            <table className="per-task">
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th className="num">Time</th>
+                  <th className="num">Cost</th>
+                  <th className="num">Lines + / −</th>
+                  <th className="num">Commits</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.table.map((r) => (
+                  <tr key={r.key}>
+                    <td>
+                      <span className="swatch" style={{ background: r.color }} /> {r.name}
+                    </td>
+                    <td className="num">{formatDuration(r.seconds)}</td>
+                    <td className="num">{formatCost(r.cost)}</td>
+                    <td className="num">
+                      {r.linesAdded + r.linesRemoved === 0 ? (
+                        <span className="muted">—</span>
+                      ) : (
+                        <>
+                          <span className="added">+{formatCount(r.linesAdded)}</span>{' '}
+                          <span className="removed">−{formatCount(r.linesRemoved)}</span>
+                        </>
+                      )}
+                    </td>
+                    <td className="num">{formatCount(r.commits)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </figure>
           <HBars
             title="Time per project folder"
             data={view.byProject}

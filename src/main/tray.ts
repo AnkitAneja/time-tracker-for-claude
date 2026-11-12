@@ -3,7 +3,7 @@ import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions } from 'e
 import type { Tracker } from './tracker'
 import type { SetupStatus } from '../shared/types'
 import type { UpdateInfo } from './updates'
-import { formatAgo, formatDuration } from '../shared/format'
+import { formatAgo, formatCost, formatDuration } from '../shared/format'
 
 export interface TrayActions {
   openTasks(): void
@@ -57,7 +57,7 @@ export function createTray(tracker: Tracker, actions: TrayActions): Tray {
     const setup = actions.setupStatus()
     const items: MenuItemConstructorOptions[] = [
       { label: headline, enabled: false },
-      { label: `Today: ${formatDuration(state.todaySeconds)}`, enabled: false },
+      { label: `Today: ${formatDuration(state.todaySeconds)} · ${formatCost(state.todayCost)}`, enabled: false },
       { label: dataLine, enabled: false },
       ...(state.namingProblem ? [{ label: `⚠ ${truncate(state.namingProblem, 60)}`, enabled: false }] : []),
       { type: 'separator' },

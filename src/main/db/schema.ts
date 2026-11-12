@@ -55,5 +55,20 @@ export const MIGRATIONS: string[] = [
   // auto naming then leaves that session's task alone.
   `
   ALTER TABLE sessions ADD COLUMN task_locked INTEGER NOT NULL DEFAULT 0;
+  `,
+  // Cost, tokens, lines of code, commits and PRs, tagged with a task like time_records.
+  // metric: cost (USD) | tokens | lines | commits | prs; kind: token type, added/removed, or ''.
+  `
+  CREATE TABLE usage_records (
+    id          INTEGER PRIMARY KEY,
+    session_id  TEXT,
+    task_id     INTEGER REFERENCES tasks(id),
+    metric      TEXT    NOT NULL,
+    kind        TEXT    NOT NULL DEFAULT '',
+    value       REAL    NOT NULL,
+    timestamp   INTEGER NOT NULL
+  );
+  CREATE INDEX idx_usage_timestamp ON usage_records(timestamp);
+  CREATE INDEX idx_usage_task ON usage_records(task_id);
   `
 ]

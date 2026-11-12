@@ -1,5 +1,13 @@
 import type { DB } from './index'
-import type { DayTaskTotal, ProjectTotal, Task, TaskTotal } from '../../shared/types'
+import type { DayTaskTotal, ProjectTotal, Task, TaskTotal, TaskUsage } from '../../shared/types'
+
+// Pivots usage_records rows into the UsageTotals columns.
+const USAGE_SELECT = `SUM(CASE WHEN metric = 'cost' THEN value ELSE 0 END) AS cost,
+           SUM(CASE WHEN metric = 'tokens' THEN value ELSE 0 END) AS tokens,
+           SUM(CASE WHEN metric = 'lines' AND kind = 'added' THEN value ELSE 0 END) AS linesAdded,
+           SUM(CASE WHEN metric = 'lines' AND kind = 'removed' THEN value ELSE 0 END) AS linesRemoved,
+           SUM(CASE WHEN metric = 'commits' THEN value ELSE 0 END) AS commits,
+           SUM(CASE WHEN metric = 'prs' THEN value ELSE 0 END) AS prs`
 
 /** All SQL lives here so the rest of the app works with plain objects. */
 export class Repo {
@@ -39,7 +47,7 @@ export class Repo {
   /** Moves everything of task `from` onto task `into`, then archives `from`. */
   mergeTask(from: number, into: number): void {
     this.db.transaction(() => {
-      for (const table of ['time_records', 'events', 'sessions'])
+      for (const table of ['time_records', 'usage_records', 'events', 'sessions'])
         this.db.prepare(`UPDATE ${table} SET task_id = ? WHERE task_id = ?`).run(into, from)
       this.archiveTask(from)
     })()
@@ -99,6 +107,7 @@ export class Repo {
     this.db.transaction(() => {
       this.db.prepare('UPDATE sessions SET task_id = ? WHERE session_id = ?').run(taskId, sessionId)
       this.db.prepare('UPDATE time_records SET task_id = ? WHERE session_id = ? AND task_id IS NULL').run(taskId, sessionId)
+      this.db.prepare('UPDATE usage_records SET task_id = ? WHERE session_id = ? AND task_id IS NULL').run(taskId, sessionId)
       this.db.prepare('UPDATE events SET task_id = ? WHERE session_id = ? AND task_id IS NULL').run(taskId, sessionId)
     })()
   }
@@ -135,6 +144,35 @@ export class Repo {
       .run(sessionId, taskId, kind, seconds, timestamp)
   }
 
+  insertUsage(
+    sessionId: string | null,
+    taskId: number | null,
+    metric: string,
+    kind: string,
+    value: number,
+    timestamp: number
+  ): void {
+    this.db
+      .prepare('INSERT INTO usage_records (session_id, task_id, metric, kind, value, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(sessionId, taskId, metric, kind, value, timestamp)
+  }
+
+  costSince(since: number): number {
+    const r = this.db
+      .prepare("SELECT COALESCE(SUM(value), 0) AS c FROM usage_records WHERE metric = 'cost' AND timestamp >= ?")
+      .get(since) as { c: number }
+    return r.c
+  }
+
+  usageByTask(from: number, to: number): TaskUsage[] {
+    return this.db
+      .prepare(
+        `SELECT task_id AS taskId, ${USAGE_SELECT}
+         FROM usage_records WHERE timestamp >= ? AND timestamp < ? GROUP BY task_id`
+      )
+      .all(from, to) as TaskUsage[]
+  }
+
   /** Seconds recorded since `since`, grouped by task (null = no task). */
   totalsSince(since: number): TaskTotal[] {
     const rows = this.db
@@ -166,9 +204,10 @@ export class Repo {
       const n = this.db
         .prepare('UPDATE time_records SET task_id = ? WHERE session_id IS ? AND task_id IS ? AND timestamp BETWEEN ? AND ?')
         .run(toTask, sessionId, fromTask, start, end).changes
-      this.db
-        .prepare('UPDATE events SET task_id = ? WHERE session_id IS ? AND task_id IS ? AND timestamp BETWEEN ? AND ?')
-        .run(toTask, sessionId, fromTask, start, end)
+      for (const table of ['usage_records', 'events'])
+        this.db
+          .prepare(`UPDATE ${table} SET task_id = ? WHERE session_id IS ? AND task_id IS ? AND timestamp BETWEEN ? AND ?`)
+          .run(toTask, sessionId, fromTask, start, end)
       return n
     })()
   }
@@ -200,6 +239,22 @@ export class Repo {
          ORDER BY day, task IS NULL, task, cwd`
       )
       .all(from, to) as { day: string; task: string | null; cwd: string | null; seconds: number }[]
+  }
+
+  exportUsageRows(
+    from: number,
+    to: number
+  ): { day: string; task: string | null; cwd: string | null; cost: number; linesAdded: number; linesRemoved: number; commits: number }[] {
+    return this.db
+      .prepare(
+        `SELECT date(u.timestamp / 1000, 'unixepoch', 'localtime') AS day, t.name AS task, s.cwd AS cwd, ${USAGE_SELECT}
+         FROM usage_records u
+         LEFT JOIN tasks t ON t.id = u.task_id
+         LEFT JOIN sessions s ON s.session_id = u.session_id
+         WHERE u.timestamp >= ? AND u.timestamp < ?
+         GROUP BY day, u.task_id, s.cwd`
+      )
+      .all(from, to) as { day: string; task: string | null; cwd: string | null; cost: number; linesAdded: number; linesRemoved: number; commits: number }[]
   }
 
   // --- dashboard ---

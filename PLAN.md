@@ -53,6 +53,10 @@ Privacy choice: the UserPromptSubmit hook payload includes the prompt text, and 
 
 Tasks are named from the conversation instead of picked by hand. After Claude's first reply in a session, the app runs `claude -p --model haiku` with the first prompt, the latest messages and the existing task list; the model reuses a task or names a new one. It re-checks every 3 replies, so a topic change starts a new task. Each session has its own task, so parallel sessions are tracked separately. A task pinned in the tray overrides auto mode. Naming calls run with hooks and telemetry turned off so they aren't tracked.
  
+## Cost and output per task (added Nov 12, 2026)
+
+Claude Code's metrics also carry `cost.usage` (USD), `token.usage`, `lines_of_code.count` (added/removed), `commit.count` and `pull_request.count`, each with `session.id`. They are stored in `usage_records` and tagged with the session's task exactly like time (pinned task wins; backfilled on naming; moved and merged with time). Only the metric value and its `type` are kept; `user.email`, account ids and model are never stored. Shown as dashboard tiles, a per-task table, today's cost in the tray, and CSV columns.
+
 ## Build phases
  
 A usable single-developer tracker takes about 2 weeks; the team version adds 2 to 3 weeks and is optional.

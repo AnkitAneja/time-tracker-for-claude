@@ -13,8 +13,11 @@ describe('CSV export', () => {
   })
 
   it('writes h:mm and decimal hours', () => {
-    expect(toCsv([{ day: '2026-11-10', task: 'Fix bug', project: 'shop', seconds: 5430 }])).toBe(
-      'Date,Task,Project folder,Duration (h:mm),Hours\r\n2026-11-10,Fix bug,shop,1:31,1.51\r\n'
+    expect(
+      toCsv([{ day: '2026-11-10', task: 'Fix bug', project: 'shop', seconds: 5430, cost: 1.234, linesAdded: 40, linesRemoved: 3, commits: 1 }])
+    ).toBe(
+      'Date,Task,Project folder,Duration (h:mm),Hours,Cost (USD),Lines added,Lines removed,Commits\r\n' +
+        '2026-11-10,Fix bug,shop,1:31,1.51,1.23,40,3,1\r\n'
     )
   })
 
@@ -29,12 +32,14 @@ describe('CSV export', () => {
     repo.insertTimeRecord('s2', a.id, 'cli', 1800, at)
     repo.insertTimeRecord('s1', null, 'cli', 600, at)
     repo.insertTimeRecord('s1', a.id, 'cli', 999, at + 2 * 86_400_000) // outside range
+    repo.insertUsage('s1', a.id, 'cost', '', 0.5, at)
+    repo.insertUsage('s2', a.id, 'lines', 'added', 12, at)
 
     const csv = tracker.exportCsv(at - 86_400_000, at + 86_400_000)
     expect(csv.split('\r\n')).toEqual([
-      'Date,Task,Project folder,Duration (h:mm),Hours',
-      '2026-11-10,Alpha,shop,1:00,1.00',
-      '2026-11-10,Untagged,shop,0:10,0.17',
+      'Date,Task,Project folder,Duration (h:mm),Hours,Cost (USD),Lines added,Lines removed,Commits',
+      '2026-11-10,Alpha,shop,1:00,1.00,0.50,12,0,0',
+      '2026-11-10,Untagged,shop,0:10,0.17,0.00,0,0,0',
       ''
     ])
   })

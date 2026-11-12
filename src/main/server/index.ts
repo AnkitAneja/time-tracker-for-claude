@@ -2,7 +2,7 @@ import http from 'node:http'
 import { gunzipSync } from 'node:zlib'
 import type { Tracker } from '../tracker'
 import { parseHookEvent } from './hooks'
-import { ActiveTimeExtractor } from './otlp'
+import { MetricsExtractor } from './otlp'
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024
 
@@ -52,7 +52,7 @@ async function readJson(req: http.IncomingMessage): Promise<unknown> {
  * body, metrics get 200 + "{}".
  */
 export function createServer(tracker: Tracker): http.Server {
-  const extractor = new ActiveTimeExtractor()
+  const extractor = new MetricsExtractor()
 
   return http.createServer(async (req, res) => {
     try {
@@ -81,7 +81,9 @@ export function createServer(tracker: Tracker): http.Server {
           tracker.setProblem('Claude Code is sending protobuf; re-run setup to switch to http/json')
           throw new HttpError(415, 'Only application/json is supported')
         }
-        tracker.handleActiveTime(extractor.extract(await readJson(req), Date.now()))
+        const m = extractor.extract(await readJson(req), Date.now())
+        tracker.handleUsage(m.usage)
+        tracker.handleActiveTime(m.activeTime)
         res.writeHead(200, { 'Content-Type': 'application/json' }).end('{}')
         return
       }

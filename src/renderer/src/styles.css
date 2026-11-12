@@ -103,3 +103,14 @@ select { font: inherit; padding: 5px 6px; border: 1px solid var(--line); border-
 .edit-task .row { display: flex; gap: 6px; }
 .edit-task input, .edit-task select { flex: 1; }
 .filters .spacer { flex: 1; }
+
+/* Cost and output */
+.tile-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.tile-value.lines { font-size: 18px; }
+.added { color: var(--ok); }
+.removed { color: var(--error); }
+.per-task { width: 100%; border-collapse: collapse; font-size: 13px; }
+.per-task th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px 8px 6px 0; border-bottom: 1px solid var(--line); }
+.per-task td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); }
+.per-task th.num, .per-task td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.per-task .swatch { margin-right: 4px; vertical-align: baseline; }

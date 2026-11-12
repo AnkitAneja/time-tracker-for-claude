@@ -14,3 +14,14 @@ export function formatAgo(ms: number, now: number): string {
   if (mins < 60) return `${mins} min ago`
   return `${Math.floor(mins / 60)} h ago`
 }
+
+/** 0 → "$0.00", 0.004 → "<$0.01", 3.456 → "$3.46", 1234.5 → "$1,234.50". */
+export function formatCost(usd: number): string {
+  if (usd > 0 && usd < 0.01) return '<$0.01'
+  return '$' + usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/** Whole counts with thousands separators: 1234 → "1,234". */
+export function formatCount(n: number): string {
+  return Math.round(n).toLocaleString('en-US')
+}

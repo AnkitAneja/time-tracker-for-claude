@@ -15,6 +15,20 @@ export interface TaskTotal {
   seconds: number
 }
 
+/** Cost and output for a task or a period. Lines, commits and PRs count what Claude Code changed. */
+export interface UsageTotals {
+  cost: number
+  tokens: number
+  linesAdded: number
+  linesRemoved: number
+  commits: number
+  prs: number
+}
+
+export interface TaskUsage extends UsageTotals {
+  taskId: number | null
+}
+
 export interface TrackerState {
   /** Task pinned by hand. null = auto mode: each session uses the task named from its chat. */
   currentTaskId: number | null
@@ -24,6 +38,8 @@ export interface TrackerState {
   namingProblem: string | null
   todaySeconds: number
   todayByTask: TaskTotal[]
+  /** USD spent today across all tasks. */
+  todayCost: number
   /** Last time any hook or metric arrived (ms epoch), or null if none yet. */
   lastDataAt: number | null
   /** Short message shown in the tray when something is wrong (port busy, wrong protocol). */
@@ -49,6 +65,8 @@ export interface Stats {
   byDay: DayTaskTotal[]
   byTask: TaskTotal[]
   byProject: ProjectTotal[]
+  usageByTask: TaskUsage[]
+  usageTotal: UsageTotals
   /** Task ids by all-time total, largest first. Used to give each task a stable color. */
   taskRank: number[]
   tasks: Task[]

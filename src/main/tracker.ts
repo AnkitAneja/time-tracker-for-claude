@@ -4,8 +4,16 @@ import type { Repo } from './db/repo'
 import { type ExportRow, toCsv } from './export'
 import { AutoTasker, type NameResult, type Namer } from './naming/autotask'
 import type { HookEvent } from './server/hooks'
-import type { ActiveTimePoint } from './server/otlp'
-import { BLOCK_GAP_MS, type ProjectTotal, type Stats, type Task, type TimeBlock, type TrackerState } from '../shared/types'
+import type { ActiveTimePoint, UsagePoint } from './server/otlp'
+import {
+  BLOCK_GAP_MS,
+  type ProjectTotal,
+  type Stats,
+  type Task,
+  type TimeBlock,
+  type TrackerState,
+  type UsageTotals
+} from '../shared/types'
 
 const CURRENT_TASK_KEY = 'current_task_id'
 
@@ -104,14 +112,33 @@ export class Tracker extends EventEmitter {
   /** Timesheet CSV for [from, to). Folders with the same name are merged, like the dashboard. */
   exportCsv(from: number, to: number): string {
     const merged = new Map<string, ExportRow>()
-    for (const r of this.repo.exportRows(from, to)) {
-      const project = r.cwd ? path.basename(r.cwd) : null
-      const key = JSON.stringify([r.day, r.task, project])
-      const row = merged.get(key) ?? { day: r.day, task: r.task, project, seconds: 0 }
-      row.seconds += r.seconds
-      merged.set(key, row)
+    const rowFor = (day: string, task: string | null, cwd: string | null): ExportRow => {
+      const project = cwd ? path.basename(cwd) : null
+      const key = JSON.stringify([day, task, project])
+      let row = merged.get(key)
+      if (!row) {
+        row = { day, task, project, seconds: 0, cost: 0, linesAdded: 0, linesRemoved: 0, commits: 0 }
+        merged.set(key, row)
+      }
+      return row
     }
-    return toCsv([...merged.values()])
+    for (const r of this.repo.exportRows(from, to)) rowFor(r.day, r.task, r.cwd).seconds += r.seconds
+    for (const u of this.repo.exportUsageRows(from, to)) {
+      const row = rowFor(u.day, u.task, u.cwd)
+      row.cost += u.cost
+      row.linesAdded += u.linesAdded
+      row.linesRemoved += u.linesRemoved
+      row.commits += u.commits
+    }
+    // Same order as before: by day, named tasks first (alphabetical), untagged last.
+    const rows = [...merged.values()].sort(
+      (a, b) =>
+        a.day.localeCompare(b.day) ||
+        Number(a.task === null) - Number(b.task === null) ||
+        (a.task ?? '').localeCompare(b.task ?? '') ||
+        (a.project ?? '').localeCompare(b.project ?? '')
+    )
+    return toCsv(rows)
   }
 
   // --- corrections ---
@@ -206,6 +233,15 @@ export class Tracker extends EventEmitter {
     this.markData(now)
   }
 
+  /** Cost, tokens, lines, commits and PRs: tagged with the same task as time from that session. */
+  handleUsage(points: UsagePoint[]): void {
+    const now = this.now()
+    for (const p of points) {
+      if (p.sessionId) this.repo.touchSession(p.sessionId, null, now)
+      this.repo.insertUsage(p.sessionId, this.taskFor(p.sessionId), p.metric, p.kind, p.value, p.timestamp)
+    }
+  }
+
   // --- auto naming ---
 
   private projectOf(sessionId: string): string | null {
@@ -284,9 +320,14 @@ export class Tracker extends EventEmitter {
     const byProject: ProjectTotal[] = [...merged]
       .map(([project, seconds]) => ({ project, seconds }))
       .sort((a, b) => b.seconds - a.seconds)
+    const usageByTask = this.repo.usageByTask(from, to)
+    const usageTotal: UsageTotals = { cost: 0, tokens: 0, linesAdded: 0, linesRemoved: 0, commits: 0, prs: 0 }
+    for (const u of usageByTask) for (const k of Object.keys(usageTotal) as (keyof UsageTotals)[]) usageTotal[k] += u[k]
     return {
       from,
       to,
+      usageByTask,
+      usageTotal,
       byDay: this.repo.totalsByDay(from, to),
       byTask: this.repo.totalsByTask(from, to),
       byProject,
@@ -304,6 +345,7 @@ export class Tracker extends EventEmitter {
       namingProblem: this.auto ? this.namingProblem : null,
       todaySeconds: todayByTask.reduce((sum, t) => sum + t.seconds, 0),
       todayByTask,
+      todayCost: this.repo.costSince(startOfLocalDay(this.now())),
       lastDataAt: this.lastDataAt,
       problem: this.problem
     }
